@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "bun run --bun next build",
     "start": "bun run --bun next start",
-    "lint": "bun run --bun next lint"
+    "lint": "bun run --bun next lint",
+		"postintall":"prisma generate"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.3.0",
