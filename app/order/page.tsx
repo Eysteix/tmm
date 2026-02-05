@@ -1,134 +1,114 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useSearchParams } from 'next/navigation';
 
-interface OrderItem {
+interface MenuItem {
+  id: string;
   name: string;
+  description: string;
   category: string;
   menuType: string;
+  price: number;
+  available: boolean;
+}
+
+interface OrderItem extends MenuItem {
   quantity: number;
 }
 
-const menuItems = {
-  babies: {
-    regular: [
-      "Awusaa Koko (no sugar) with mashed bread",
-      "Rice & Wheat Porridge (no sugar) with mashed bread",
-      "Oat Porridge (no sugar) with mashed bread"
-    ],
-    vip: [
-      "Awusaa Koko with milk and mashed bread",
-      "Rice & Wheat Porridge with milk and mashed bread",
-      "Oat Porridge with milk/groundnut and mashed bread",
-      "Mini fruit purée (banana or pawpaw)"
-    ]
-  },
-  diabetesFree: {
-    regular: [
-      "Awusaa Koko with koose or bread",
-      "Rice & Wheat Porridge with koose or bread",
-      "Oat Porridge with koose or bread",
-      "Toasted/plain bread with koose or fried egg",
-      "Hot Lipton tea with sugar and milk"
-    ],
-    vip: [
-      "Awusaa Koko with milk & groundnut, bread or koose",
-      "Rice & Wheat Porridge with milk & groundnut",
-      "Oat Porridge with milk & fruit topping",
-      "Toasted bread with koose & egg",
-      "Hot Lipton tea with milk & snack box"
-    ]
-  },
-  diabetic: {
-    regular: [
-      "Awusaa Koko (no sugar) with unsweetened groundnut",
-      "Rice & Wheat Porridge (no sugar) with unsweetened groundnut",
-      "Oat Porridge (no sugar) with unsweetened groundnut",
-      "Wheat bread (2-4 slices) with boiled or low-oil egg",
-      "Hot Lipton tea (no sugar), lemon optional"
-    ],
-    vip: [
-      "Awusaa Koko with skimmed milk and unsweetened groundnut",
-      "Rice & Wheat Porridge with skimmed milk",
-      "Oat Porridge with skimmed milk & fruit topping",
-      "Toasted wheat bread with boiled egg & vegetables",
-      "Herbal tea (no sugar)",
-      "Special Diabetic Care Box"
-    ]
-  }
-};
-
-export default function OrderPage() {
+function OrderPageContent() {
+  const searchParams = useSearchParams();
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<'babies' | 'diabetesFree' | 'diabetic'>('diabetesFree');
-  const [selectedMenuType, setSelectedMenuType] = useState<'regular' | 'vip'>('regular');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedMenuType, setSelectedMenuType] = useState<string>('all');
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [notes, setNotes] = useState('');
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState('');
 
-  const addOrderItem = (itemName: string) => {
-    const existingItem = orderItems.find(
-      item => item.name === itemName && item.category === selectedCategory && item.menuType === selectedMenuType
-    );
+  useEffect(() => {
+    fetchMenuItems();
+  }, []);
 
-    if (existingItem) {
-      setOrderItems(orderItems.map(item =>
-        item.name === itemName && item.category === selectedCategory && item.menuType === selectedMenuType
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ));
-    } else {
-      setOrderItems([...orderItems, {
-        name: itemName,
-        category: selectedCategory,
-        menuType: selectedMenuType,
-        quantity: 1
-      }]);
+  useEffect(() => {
+    const itemId = searchParams.get('item');
+    if (itemId && menuItems.length > 0) {
+      const item = menuItems.find(m => m.id === itemId);
+      if (item) {
+        addToOrder(item);
+      }
+    }
+  }, [searchParams, menuItems]);
+
+  const fetchMenuItems = async () => {
+    try {
+      const response = await fetch('/api/menu');
+      if (response.ok) {
+        const data = await response.json();
+        setMenuItems(data.filter((item: MenuItem) => item.available));
+      }
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const removeOrderItem = (itemName: string, category: string, menuType: string) => {
-    setOrderItems(orderItems.filter(
-      item => !(item.name === itemName && item.category === category && item.menuType === menuType)
-    ));
-  };
-
-  const updateQuantity = (itemName: string, category: string, menuType: string, newQuantity: number) => {
-    if (newQuantity <= 0) {
-      removeOrderItem(itemName, category, menuType);
-    } else {
-      setOrderItems(orderItems.map(item =>
-        item.name === itemName && item.category === category && item.menuType === menuType
-          ? { ...item, quantity: newQuantity }
-          : item
+  const addToOrder = (item: MenuItem) => {
+    const existing = orderItems.find(oi => oi.id === item.id);
+    if (existing) {
+      setOrderItems(orderItems.map(oi =>
+        oi.id === item.id ? { ...oi, quantity: oi.quantity + 1 } : oi
       ));
+    } else {
+      setOrderItems([...orderItems, { ...item, quantity: 1 }]);
     }
   };
+
+  const updateQuantity = (id: string, change: number) => {
+    setOrderItems(orderItems.map(item => {
+      if (item.id === id) {
+        const newQuantity = Math.max(0, item.quantity + change);
+        return { ...item, quantity: newQuantity };
+      }
+      return item;
+    }).filter(item => item.quantity > 0));
+  };
+
+  const removeItem = (id: string) => {
+    setOrderItems(orderItems.filter(item => item.id !== id));
+  };
+
+  const getTotalAmount = () => {
+    return orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  };
+
+  const filteredMenuItems = menuItems.filter(item => {
+    if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+    if (selectedMenuType !== 'all' && item.menuType !== selectedMenuType) return false;
+    return true;
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    setSubmitMessage('');
-
+    
     if (orderItems.length === 0) {
       setSubmitMessage('Please add at least one item to your order');
-      setIsSubmitting(false);
       return;
     }
 
-    if (!paymentProof) {
-      setSubmitMessage('Please upload payment proof screenshot');
-      setIsSubmitting(false);
-      return;
-    }
+    setIsSubmitting(true);
+    setSubmitMessage('');
 
     try {
       const formData = new FormData();
@@ -138,8 +118,16 @@ export default function OrderPage() {
       formData.append('deliveryAddress', deliveryAddress);
       formData.append('deliveryDate', deliveryDate);
       formData.append('notes', notes);
-      formData.append('orderItems', JSON.stringify(orderItems));
-      formData.append('paymentProof', paymentProof);
+      formData.append('orderItems', JSON.stringify(orderItems.map(item => ({
+        name: item.name,
+        menuItemId: item.id,
+        quantity: item.quantity,
+        price: item.price
+      }))));
+      
+      if (paymentProof) {
+        formData.append('paymentProof', paymentProof);
+      }
 
       const response = await fetch('/api/orders', {
         method: 'POST',
@@ -147,7 +135,8 @@ export default function OrderPage() {
       });
 
       if (response.ok) {
-        setSubmitMessage('Order submitted successfully! We will contact you soon to confirm.');
+        const result = await response.json();
+        setSubmitMessage('Order placed successfully! Order ID: ' + result.orderId);
         // Reset form
         setCustomerName('');
         setCustomerPhone('');
@@ -155,44 +144,60 @@ export default function OrderPage() {
         setDeliveryAddress('');
         setDeliveryDate('');
         setNotes('');
-        setOrderItems([]);
         setPaymentProof(null);
+        setOrderItems([]);
       } else {
-        setSubmitMessage('Error submitting order. Please try again or contact us directly.');
+        setSubmitMessage('Error placing order. Please try again.');
       }
     } catch (error) {
-      setSubmitMessage('Error submitting order. Please try again or contact us directly.');
+      console.error('Error submitting order:', error);
+      setSubmitMessage('Error placing order. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const currentMenuItems = menuItems[selectedCategory][selectedMenuType];
+  const getTomorrowDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white">
-      {/* Header */}
+    <div className="min-h-screen bg-gray-50">
+      {/* Header - Mobile Responsive */}
       <header className="bg-white shadow-sm sticky top-0 z-50">
-        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-3">
+        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <Link href="/" className="flex items-center space-x-2 sm:space-x-3">
               <Image
                 src="/logo-black.webp"
                 alt="TMM Logo"
-                width={50}
-                height={50}
-                className="rounded-lg"
+                width={40}
+                height={40}
+                className="sm:w-[50px] sm:h-[50px] rounded-lg"
               />
               <div>
-                <h1 className="text-2xl font-bold text-brand-primary">Taste Mummies Made</h1>
-                <p className="text-sm text-gray-600 italic">Home in every spoon</p>
+                <h1 className="text-lg sm:text-2xl font-bold text-brand-primary">Taste Mummies Made</h1>
+                <p className="text-xs sm:text-sm text-gray-600 italic hidden sm:block">Home in every spoon</p>
               </div>
             </Link>
-            <div className="flex gap-4">
-              <Link href="/" className="btn-secondary">
+            <div className="flex gap-2 sm:gap-4">
+              <Link href="/" className="btn-secondary text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6">
                 Home
               </Link>
-              <Link href="/menu" className="btn-secondary">
+              <Link href="/menu" className="btn-secondary text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6">
                 Menu
               </Link>
             </div>
@@ -200,134 +205,195 @@ export default function OrderPage() {
         </nav>
       </header>
 
-      {/* Order Form */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center mb-8">
-          <h2 className="text-4xl font-bold mb-4 text-gray-900">Place Your Order</h2>
-          <p className="text-xl text-gray-600">
-            Order now for tomorrow's fresh breakfast delivery (6:30 AM - 9:30 AM)
-          </p>
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12">
+        <div className="text-center mb-6 sm:mb-8">
+          <h2 className="text-3xl sm:text-4xl font-bold mb-2 sm:mb-4 text-gray-900">Place Your Order</h2>
+          <p className="text-base sm:text-lg text-gray-600">Select your items and complete your order</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Menu Selection */}
+        <div className="grid lg:grid-cols-3 gap-6 sm:gap-8">
+          {/* Menu Selection - 2 columns on large screens */}
           <div className="lg:col-span-2">
-            <div className="card mb-8">
-              <h3 className="text-2xl font-bold mb-6 text-brand-primary">Select Your Meals</h3>
-
-              {/* Category Selection */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold mb-3">Customer Category</label>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCategory('babies')}
-                    className={`py-3 px-4 rounded-lg border-2 transition-colors ${
-                      selectedCategory === 'babies'
-                        ? 'border-brand-primary bg-brand-primary text-white'
-                        : 'border-gray-300 hover:border-brand-primary'
-                    }`}
-                  >
-                    👶 Babies
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCategory('diabetesFree')}
-                    className={`py-3 px-4 rounded-lg border-2 transition-colors ${
-                      selectedCategory === 'diabetesFree'
-                        ? 'border-brand-primary bg-brand-primary text-white'
-                        : 'border-gray-300 hover:border-brand-primary'
-                    }`}
-                  >
-                    🍽️ Regular
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedCategory('diabetic')}
-                    className={`py-3 px-4 rounded-lg border-2 transition-colors ${
-                      selectedCategory === 'diabetic'
-                        ? 'border-brand-primary bg-brand-primary text-white'
-                        : 'border-gray-300 hover:border-brand-primary'
-                    }`}
-                  >
-                    💚 Diabetic
-                  </button>
+            <div className="bg-white rounded-lg shadow p-4 sm:p-6 mb-6">
+              <h3 className="text-xl sm:text-2xl font-bold mb-4">Select Items</h3>
+              
+              {/* Filters */}
+              <div className="mb-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Category</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setSelectedCategory('all')}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold min-h-[44px] ${
+                        selectedCategory === 'all' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setSelectedCategory('babies')}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold min-h-[44px] ${
+                        selectedCategory === 'babies' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      👶 Babies
+                    </button>
+                    <button
+                      onClick={() => setSelectedCategory('diabetes-free')}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold min-h-[44px] ${
+                        selectedCategory === 'diabetes-free' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      🍽️ Diabetes-Free
+                    </button>
+                    <button
+                      onClick={() => setSelectedCategory('diabetic')}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold min-h-[44px] ${
+                        selectedCategory === 'diabetic' ? 'bg-brand-primary text-white' : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      💚 Diabetic
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Menu Type Selection */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold mb-3">Menu Type</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedMenuType('regular')}
-                    className={`py-3 px-4 rounded-lg border-2 transition-colors ${
-                      selectedMenuType === 'regular'
-                        ? 'border-brand-primary bg-brand-primary text-white'
-                        : 'border-gray-300 hover:border-brand-primary'
-                    }`}
-                  >
-                    Regular Menu
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedMenuType('vip')}
-                    className={`py-3 px-4 rounded-lg border-2 transition-colors ${
-                      selectedMenuType === 'vip'
-                        ? 'border-brand-primary bg-brand-primary text-white'
-                        : 'border-gray-300 hover:border-brand-primary'
-                    }`}
-                  >
-                    ⭐ VIP Menu
-                  </button>
+                <div>
+                  <label className="block text-sm font-semibold mb-2">Type</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setSelectedMenuType('all')}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold min-h-[44px] ${
+                        selectedMenuType === 'all' ? 'bg-brand-secondary text-white' : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setSelectedMenuType('regular')}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold min-h-[44px] ${
+                        selectedMenuType === 'regular' ? 'bg-brand-secondary text-white' : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      Regular
+                    </button>
+                    <button
+                      onClick={() => setSelectedMenuType('vip')}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold min-h-[44px] ${
+                        selectedMenuType === 'vip' ? 'bg-brand-secondary text-white' : 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      ⭐ VIP
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* Menu Items */}
               <div className="space-y-3">
-                <label className="block text-sm font-semibold mb-3">Available Items</label>
-                {currentMenuItems.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                    <span className="text-sm">{item}</span>
-                    <button
-                      type="button"
-                      onClick={() => addOrderItem(item)}
-                      className="bg-brand-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-brand-secondary transition-colors"
-                    >
-                      Add +
-                    </button>
+                {filteredMenuItems.map((item) => (
+                  <div key={item.id} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:border-brand-primary transition-colors">
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{item.name}</h4>
+                          <span className={`px-2 py-0.5 text-xs rounded ${
+                            item.menuType === 'vip' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {item.menuType === 'vip' ? 'VIP' : 'Regular'}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-gray-600 mb-2">{item.description}</p>
+                        <p className="text-lg sm:text-xl font-bold text-brand-primary">GH₵ {item.price.toFixed(2)}</p>
+                      </div>
+                      <button
+                        onClick={() => addToOrder(item)}
+                        className="bg-brand-primary hover:bg-brand-secondary text-white px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[44px]"
+                      >
+                        + Add
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
+          </div>
 
-            {/* Customer Information Form */}
-            <form onSubmit={handleSubmit} className="card">
-              <h3 className="text-2xl font-bold mb-6 text-brand-primary">Delivery Information</h3>
+          {/* Order Summary & Form - 1 column on large screens, sticky */}
+          <div className="lg:sticky lg:top-24 lg:self-start">
+            {/* Cart */}
+            <div className="bg-white rounded-lg shadow p-4 sm:p-6 mb-6">
+              <h3 className="text-xl font-bold mb-4">Your Order ({orderItems.length} items)</h3>
+              
+              {orderItems.length === 0 ? (
+                <p className="text-gray-500 text-center py-8 text-sm">No items added yet</p>
+              ) : (
+                <div className="space-y-3 mb-4">
+                  {orderItems.map((item) => (
+                    <div key={item.id} className="flex justify-between items-center border-b border-gray-200 pb-3">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-sm text-gray-900">{item.name}</h4>
+                        <p className="text-xs text-gray-600">GH₵ {item.price.toFixed(2)} each</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => updateQuantity(item.id, -1)}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 w-8 h-8 rounded flex items-center justify-center min-h-[44px] min-w-[44px]"
+                        >
+                          -
+                        </button>
+                        <span className="w-8 text-center font-semibold">{item.quantity}</span>
+                        <button
+                          onClick={() => updateQuantity(item.id, 1)}
+                          className="bg-brand-primary hover:bg-brand-secondary text-white w-8 h-8 rounded flex items-center justify-center min-h-[44px] min-w-[44px]"
+                        >
+                          +
+                        </button>
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          className="text-red-600 hover:text-red-800 ml-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-              <div className="space-y-4">
+              <div className="border-t border-gray-300 pt-4">
+                <div className="flex justify-between items-center text-xl font-bold">
+                  <span>Total:</span>
+                  <span className="text-brand-primary">GH₵ {getTotalAmount().toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Order Form */}
+            <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+              <h3 className="text-xl font-bold mb-4">Delivery Details</h3>
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold mb-2">Full Name *</label>
+                  <label className="block text-sm font-semibold mb-2">Name *</label>
                   <input
                     type="text"
                     required
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                    placeholder="Enter your full name"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-base min-h-[44px]"
+                    placeholder="Your full name"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold mb-2">Phone Number *</label>
+                  <label className="block text-sm font-semibold mb-2">Phone *</label>
                   <input
                     type="tel"
                     required
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                    placeholder="+233 XXX XXX XXX"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-base min-h-[44px]"
+                    placeholder="0XXXXXXXXX"
                   />
                 </div>
 
@@ -337,8 +403,8 @@ export default function OrderPage() {
                     type="email"
                     value={customerEmail}
                     onChange={(e) => setCustomerEmail(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                    placeholder="your.email@example.com"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-base min-h-[44px]"
+                    placeholder="your@email.com"
                   />
                 </div>
 
@@ -349,8 +415,8 @@ export default function OrderPage() {
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
                     rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                    placeholder="Enter your full delivery address"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-base"
+                    placeholder="Your delivery address"
                   />
                 </div>
 
@@ -361,135 +427,80 @@ export default function OrderPage() {
                     required
                     value={deliveryDate}
                     onChange={(e) => setDeliveryDate(e.target.value)}
-                    min={new Date(Date.now() + 86400000).toISOString().split('T')[0]}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+                    min={getTomorrowDate()}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-base min-h-[44px]"
                   />
-                  <p className="text-xs text-gray-600 mt-1">Delivery between 6:30 AM - 9:30 AM</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold mb-2">Special Instructions (Optional)</label>
+                  <label className="block text-sm font-semibold mb-2">Additional Notes</label>
                   <textarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
-                    placeholder="Any special requests or dietary notes..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-base"
+                    placeholder="Any special instructions?"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold mb-2">Payment Proof Screenshot *</label>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3">
-                    <p className="text-sm text-blue-900 mb-2"><strong>Payment Details:</strong></p>
-                    <p className="text-sm text-blue-800">MTN MoMo: 0248928928</p>
-                    <p className="text-sm text-blue-800">Telecel Cash: 0500863154</p>
-                    <p className="text-sm text-blue-800">Name: Atakey Christopher</p>
-                  </div>
+                  <label className="block text-sm font-semibold mb-2">Payment Proof (Optional)</label>
                   <input
                     type="file"
-                    required
                     accept="image/*"
                     onChange={(e) => setPaymentProof(e.target.files?.[0] || null)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary text-base"
                   />
-                  <p className="text-xs text-gray-600 mt-1">
-                    Please make payment first and upload screenshot as proof
-                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Upload your MoMo/Telecel Cash screenshot</p>
                 </div>
-              </div>
 
-              {submitMessage && (
-                <div className={`mt-6 p-4 rounded-lg ${
-                  submitMessage.includes('successfully') 
-                    ? 'bg-green-50 text-green-800 border border-green-200' 
-                    : 'bg-red-50 text-red-800 border border-red-200'
-                }`}>
-                  {submitMessage}
-                </div>
-              )}
+                <button
+                  type="submit"
+                  disabled={isSubmitting || orderItems.length === 0}
+                  className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed text-base sm:text-lg min-h-[48px]"
+                >
+                  {isSubmitting ? 'Placing Order...' : 'Place Order'}
+                </button>
 
-              <button
-                type="submit"
-                disabled={isSubmitting || orderItems.length === 0}
-                className="w-full btn-primary mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? 'Submitting...' : 'Place Order'}
-              </button>
-            </form>
-          </div>
-
-          {/* Order Summary */}
-          <div className="lg:col-span-1">
-            <div className="card sticky top-24">
-              <h3 className="text-2xl font-bold mb-6 text-brand-primary">Order Summary</h3>
-
-              {orderItems.length === 0 ? (
-                <p className="text-gray-600 text-center py-8">No items added yet</p>
-              ) : (
-                <div className="space-y-4">
-                  {orderItems.map((item, index) => (
-                    <div key={index} className="bg-gray-50 rounded-lg p-3">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <p className="font-semibold text-sm">{item.name}</p>
-                          <p className="text-xs text-gray-600">
-                            {item.category === 'babies' ? '👶 Babies' :
-                             item.category === 'diabetic' ? '💚 Diabetic' :
-                             '🍽️ Regular'} - {item.menuType === 'vip' ? '⭐ VIP' : 'Regular'}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeOrderItem(item.name, item.category, item.menuType)}
-                          className="text-red-500 hover:text-red-700 text-sm"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.name, item.category, item.menuType, item.quantity - 1)}
-                          className="bg-gray-300 hover:bg-gray-400 text-gray-800 w-8 h-8 rounded"
-                        >
-                          -
-                        </button>
-                        <span className="font-semibold">{item.quantity}</span>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.name, item.category, item.menuType, item.quantity + 1)}
-                          className="bg-brand-primary hover:bg-brand-secondary text-white w-8 h-8 rounded"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <p className="text-sm text-gray-600 mb-2">
-                  <strong>Total Items:</strong> {orderItems.reduce((sum, item) => sum + item.quantity, 0)}
-                </p>
-                <p className="text-xs text-gray-500">
-                  Final price will be confirmed after order review
-                </p>
-              </div>
+                {submitMessage && (
+                  <div className={`p-4 rounded-lg text-sm ${
+                    submitMessage.includes('success') 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {submitMessage}
+                  </div>
+                )}
+              </form>
             </div>
           </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-8 mt-12">
+      <footer className="bg-gray-900 text-white py-6 sm:py-8 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gray-400">
+          <p className="text-gray-400 text-sm sm:text-base">
             © 2026 Taste Mummies Made Restaurant. All rights reserved.
           </p>
         </div>
       </footer>
     </div>
+  );
+}
+
+
+export default function OrderPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <OrderPageContent />
+    </Suspense>
   );
 }

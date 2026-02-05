@@ -219,8 +219,21 @@ async function main() {
   await prisma.orderItem.deleteMany();
   await prisma.order.deleteMany();
   await prisma.menuItem.deleteMany();
+  await prisma.user.deleteMany();
 
   console.log('Cleared existing data');
+
+  // Seed admin user (password: admin123)
+  await prisma.user.create({
+    data: {
+      email: 'admin@tmm.com',
+      password: 'admin123', // In production, this should be hashed
+      name: 'TMM Admin',
+      role: 'admin',
+    },
+  });
+
+  console.log('Created admin user: admin@tmm.com / admin123');
 
   // Seed menu items
   for (const item of menuItems) {

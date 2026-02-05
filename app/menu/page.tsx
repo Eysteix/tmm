@@ -1,107 +1,93 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
 interface MenuItem {
+  id: string;
   name: string;
   description: string;
   category: string;
-}
-
-const menuData = {
-  babies: {
-    regular: [
-      { name: "Awusaa Koko", description: "No sugar, with mashed bread and optional soft boiled egg", category: "Babies 6+ months" },
-      { name: "Rice & Wheat Porridge", description: "No sugar, with mashed bread", category: "Babies 6+ months" },
-      { name: "Oat Porridge", description: "No sugar, with mashed bread", category: "Babies 6+ months" }
-    ],
-    vip: [
-      { name: "Awusaa Koko with Milk", description: "With milk and mashed bread", category: "Babies 6+ months" },
-      { name: "Rice & Wheat Porridge with Milk", description: "With milk and mashed bread", category: "Babies 6+ months" },
-      { name: "Oat Porridge Premium", description: "With milk/groundnut and mashed bread", category: "Babies 6+ months" },
-      { name: "Mini Fruit Purée", description: "Banana or pawpaw", category: "Babies 6+ months" }
-    ]
-  },
-  diabetesFree: {
-    regular: [
-      { name: "Awusaa Koko", description: "With koose or bread (2-6 slices)", category: "Diabetes-Free" },
-      { name: "Rice & Wheat Porridge", description: "With koose or bread", category: "Diabetes-Free" },
-      { name: "Oat Porridge", description: "With koose or bread", category: "Diabetes-Free" },
-      { name: "Toasted/Plain Bread", description: "With koose or fried egg", category: "Diabetes-Free" },
-      { name: "Hot Lipton Tea", description: "With sugar and milk", category: "Diabetes-Free" }
-    ],
-    vip: [
-      { name: "Awusaa Koko Premium", description: "With milk & groundnut, served with bread or koose", category: "Diabetes-Free" },
-      { name: "Rice & Wheat Porridge Premium", description: "With milk & groundnut, served with bread or koose", category: "Diabetes-Free" },
-      { name: "Oat Porridge Deluxe", description: "With milk & fruit topping", category: "Diabetes-Free" },
-      { name: "Toasted Bread Special", description: "With koose & egg", category: "Diabetes-Free" },
-      { name: "Hot Lipton Tea Premium", description: "With milk & snack box", category: "Diabetes-Free" }
-    ]
-  },
-  diabetic: {
-    regular: [
-      { name: "Awusaa Koko", description: "No sugar, with unsweetened groundnut", category: "Diabetic Care" },
-      { name: "Rice & Wheat Porridge", description: "No sugar, with unsweetened groundnut", category: "Diabetic Care" },
-      { name: "Oat Porridge", description: "No sugar, with unsweetened groundnut", category: "Diabetic Care" },
-      { name: "Wheat Bread", description: "2-4 slices with boiled or low-oil egg", category: "Diabetic Care" },
-      { name: "Hot Lipton Tea", description: "No sugar, lemon optional", category: "Diabetic Care" }
-    ],
-    vip: [
-      { name: "Awusaa Koko Special", description: "With skimmed milk and unsweetened groundnut", category: "Diabetic Care" },
-      { name: "Rice & Wheat Porridge Special", description: "With skimmed milk and unsweetened groundnut", category: "Diabetic Care" },
-      { name: "Oat Porridge Special", description: "With skimmed milk & fruit topping", category: "Diabetic Care" },
-      { name: "Toasted Wheat Bread", description: "With boiled egg & vegetables", category: "Diabetic Care" },
-      { name: "Herbal Tea", description: "No sugar", category: "Diabetic Care" },
-      { name: "Special Diabetic Care Box", description: "Carefully curated items for diabetic health", category: "Diabetic Care" }
-    ]
-  }
-};
-
-function MenuSection({ title, items, type }: { title: string; items: MenuItem[]; type: string }) {
-  return (
-    <div className="mb-12">
-      <h3 className="text-2xl font-bold mb-6 text-brand-primary flex items-center gap-3">
-        <span className={`px-3 py-1 rounded-full text-sm ${type === 'vip' ? 'bg-yellow-100' : 'bg-gray-100'}`}>
-          {type === 'vip' ? '⭐ VIP Menu' : 'Regular Menu'}
-        </span>
-        {title}
-      </h3>
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map((item, index) => (
-          <div key={index} className="card hover:shadow-xl transition-shadow">
-            <h4 className="font-semibold text-lg mb-2 text-gray-800">{item.name}</h4>
-            <p className="text-gray-600 text-sm">{item.description}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  menuType: string;
+  price: number;
+  available: boolean;
 }
 
 export default function MenuPage() {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedType, setSelectedType] = useState<string>('all');
+
+  useEffect(() => {
+    fetchMenuItems();
+  }, []);
+
+  const fetchMenuItems = async () => {
+    try {
+      const response = await fetch('/api/menu');
+      if (response.ok) {
+        const data = await response.json();
+        setMenuItems(data.filter((item: MenuItem) => item.available));
+      }
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredItems = menuItems.filter((item) => {
+    if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
+    if (selectedType !== 'all' && item.menuType !== selectedType) return false;
+    return true;
+  });
+
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case 'babies': return '👶 Babies (6+ months)';
+      case 'diabetes-free': return '🍽️ Diabetes-Free';
+      case 'diabetic': return '💚 Diabetic Care';
+      default: return category;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading menu...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-amber-50 to-white">
-      {/* Header */}
+    <div className="min-h-screen bg-gray-50">
+      {/* Header - Mobile Responsive */}
       <header className="bg-white shadow-sm sticky top-0 z-50">
-        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="flex items-center space-x-3">
+        <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <Link href="/" className="flex items-center space-x-2 sm:space-x-3">
               <Image
                 src="/logo-black.webp"
                 alt="TMM Logo"
-                width={50}
-                height={50}
-                className="rounded-lg"
+                width={40}
+                height={40}
+                className="sm:w-[50px] sm:h-[50px] rounded-lg"
               />
               <div>
-                <h1 className="text-2xl font-bold text-brand-primary">Taste Mummies Made</h1>
-                <p className="text-sm text-gray-600 italic">Home in every spoon</p>
+                <h1 className="text-lg sm:text-2xl font-bold text-brand-primary">Taste Mummies Made</h1>
+                <p className="text-xs sm:text-sm text-gray-600 italic hidden sm:block">Home in every spoon</p>
               </div>
             </Link>
-            <div className="flex gap-4">
-              <Link href="/" className="btn-secondary">
+            <div className="flex gap-2 sm:gap-4">
+              <Link href="/" className="btn-secondary text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6 min-h-[44px] flex items-center">
                 Home
               </Link>
-              <Link href="/order" className="btn-primary">
+              <Link href="/order" className="btn-primary text-sm sm:text-base py-2 px-4 sm:py-3 sm:px-6 min-h-[44px] flex items-center">
                 Order Now
               </Link>
             </div>
@@ -109,59 +95,159 @@ export default function MenuPage() {
         </nav>
       </header>
 
-      {/* Menu Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold mb-4 text-gray-900">Our Menu</h2>
-          <p className="text-xl text-gray-600">
-            Specialized meals for every need - from babies to diabetic care
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12">
+        {/* Page Header */}
+        <div className="text-center mb-8 sm:mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold mb-3 sm:mb-4 text-gray-900">Our Menu</h2>
+          <p className="text-lg sm:text-xl text-gray-600">
+            Specialized meals for every need
           </p>
         </div>
 
-        {/* Babies Menu */}
-        <section className="mb-16">
-          <div className="flex items-center gap-3 mb-8">
-            <span className="text-4xl">👶</span>
-            <h2 className="text-3xl font-bold text-gray-900">For Babies (6 Months & Above)</h2>
+        {/* Filters - Mobile Responsive with min 44px touch targets */}
+        <div className="bg-white rounded-lg shadow p-4 sm:p-6 mb-6 sm:mb-8">
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Filter by Category</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedCategory('all')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold transition-all min-h-[44px] ${
+                  selectedCategory === 'all'
+                    ? 'bg-brand-primary text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setSelectedCategory('babies')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold transition-all min-h-[44px] ${
+                  selectedCategory === 'babies'
+                    ? 'bg-brand-primary text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                👶 Babies
+              </button>
+              <button
+                onClick={() => setSelectedCategory('diabetes-free')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold transition-all min-h-[44px] ${
+                  selectedCategory === 'diabetes-free'
+                    ? 'bg-brand-primary text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                🍽️ Diabetes-Free
+              </button>
+              <button
+                onClick={() => setSelectedCategory('diabetic')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold transition-all min-h-[44px] ${
+                  selectedCategory === 'diabetic'
+                    ? 'bg-brand-primary text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                💚 Diabetic Care
+              </button>
+            </div>
           </div>
-          <MenuSection title="" items={menuData.babies.regular} type="regular" />
-          <MenuSection title="" items={menuData.babies.vip} type="vip" />
-        </section>
 
-        {/* Diabetes-Free Menu */}
-        <section className="mb-16">
-          <div className="flex items-center gap-3 mb-8">
-            <span className="text-4xl">🍽️</span>
-            <h2 className="text-3xl font-bold text-gray-900">Diabetes-Free Customers</h2>
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Filter by Type</h3>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedType('all')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold transition-all min-h-[44px] ${
+                  selectedType === 'all'
+                    ? 'bg-brand-secondary text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setSelectedType('regular')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold transition-all min-h-[44px] ${
+                  selectedType === 'regular'
+                    ? 'bg-brand-secondary text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Regular
+              </button>
+              <button
+                onClick={() => setSelectedType('vip')}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold transition-all min-h-[44px] ${
+                  selectedType === 'vip'
+                    ? 'bg-brand-secondary text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                ⭐ VIP
+              </button>
+            </div>
           </div>
-          <MenuSection title="" items={menuData.diabetesFree.regular} type="regular" />
-          <MenuSection title="" items={menuData.diabetesFree.vip} type="vip" />
-        </section>
+        </div>
 
-        {/* Diabetic Care Menu */}
-        <section className="mb-16">
-          <div className="flex items-center gap-3 mb-8">
-            <span className="text-4xl">💚</span>
-            <h2 className="text-3xl font-bold text-gray-900">Diabetic Patients (Special Care)</h2>
+        {/* Menu Items Grid - Responsive: 1 col mobile, 2 col tablet, 3 col desktop */}
+        {filteredItems.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-12 text-center">
+            <p className="text-gray-600 text-lg">No items found</p>
           </div>
-          <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-8 rounded">
-            <p className="text-green-800">
-              <strong>Special Care:</strong> All items are prepared with no added sugar and carefully selected
-              ingredients to support diabetic health management.
-            </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {filteredItems.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all overflow-hidden border border-gray-100"
+              >
+                <div className="p-4 sm:p-6">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full font-semibold ${
+                            item.menuType === 'vip'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {item.menuType === 'vip' ? '⭐ VIP' : 'Regular'}
+                        </span>
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">{item.name}</h3>
+                      <p className="text-sm text-gray-600 mb-4">{item.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="text-2xl sm:text-3xl font-bold text-brand-primary">
+                      GH₵ {item.price.toFixed(2)}
+                    </div>
+                    <Link
+                      href={`/order?item=${item.id}`}
+                      className="bg-brand-primary hover:bg-brand-secondary text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors min-h-[44px] flex items-center justify-center"
+                    >
+                      Add to Order
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-          <MenuSection title="" items={menuData.diabetic.regular} type="regular" />
-          <MenuSection title="" items={menuData.diabetic.vip} type="vip" />
-        </section>
+        )}
 
         {/* CTA Section */}
-        <section className="text-center py-12">
-          <div className="card max-w-2xl mx-auto bg-gradient-to-r from-brand-primary to-brand-secondary text-white">
-            <h3 className="text-3xl font-bold mb-4">Ready to Order?</h3>
-            <p className="text-lg mb-6">
+        <section className="text-center py-8 sm:py-12 mt-8 sm:mt-12">
+          <div className="bg-gradient-to-r from-brand-primary to-brand-secondary text-white rounded-xl shadow-lg p-6 sm:p-8 max-w-2xl mx-auto">
+            <h3 className="text-2xl sm:text-3xl font-bold mb-3 sm:mb-4">Ready to Order?</h3>
+            <p className="text-base sm:text-lg mb-4 sm:mb-6">
               Place your order now for tomorrow's fresh breakfast delivery
             </p>
-            <Link href="/order" className="inline-block bg-white text-brand-primary font-semibold py-3 px-8 rounded-lg hover:bg-gray-100 transition-colors">
+            <Link
+              href="/order"
+              className="inline-block bg-white text-brand-primary font-semibold py-3 px-6 sm:py-4 sm:px-8 rounded-lg hover:bg-gray-100 transition-colors text-base sm:text-lg min-h-[44px]"
+            >
               Place Your Order
             </Link>
           </div>
@@ -169,9 +255,9 @@ export default function MenuPage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-8">
+      <footer className="bg-gray-900 text-white py-6 sm:py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gray-400">
+          <p className="text-gray-400 text-sm sm:text-base">
             © 2026 Taste Mummies Made Restaurant. All rights reserved.
           </p>
         </div>
